@@ -1,0 +1,20 @@
+# Runtime data (fetched items, digests, state)
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Generated output and scratch files
+*.html
+!template.html
+*.pdf
+*.tmp
+
+# Rendered digests
+digests/
+
+# Personal interests (copy interests.example.md to interests.md)
+interests.md

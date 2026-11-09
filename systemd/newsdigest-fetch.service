@@ -1,0 +1,6 @@
+[Unit]
+Description=Fetch new items for the weekly news digest
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.claude/skills/newsdigest/fetch.py fetch

@@ -1,0 +1,11 @@
+[Unit]
+Description=Fetch digest items after boot and every 4 hours while the PC is on
+
+[Timer]
+# 2 minutes after boot gives the network time to come up.
+OnBootSec=2min
+# The shallowest feeds hold only about 5-10 hours of news.
+OnUnitActiveSec=4h
+
+[Install]
+WantedBy=timers.target

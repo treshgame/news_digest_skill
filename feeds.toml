@@ -1,0 +1,51 @@
+# region -> feeds. Region is defined by the feed, not by the article.
+# `name` must be unique: it is the label the AI sees and the key of the per-feed cap.
+# `cat` is optional, only a hint for the AI (politics | finance | tech); the AI picks the final category.
+# Tech/finance feeds are filed under their home region.
+
+[USA]
+feeds = [
+  { name = "politico", url = "https://rss.politico.com/politics-news.xml" },
+  { name = "hill", url = "https://thehill.com/feed/" },
+  { name = "cnbc", url = "https://www.cnbc.com/id/100003114/device/rss/rss.html", cat = "finance" },
+  { name = "cnbc-fin", url = "https://www.cnbc.com/id/10001147/device/rss/rss.html", cat = "finance" },
+  { name = "techcrunch", url = "https://techcrunch.com/feed/", cat = "tech" },
+  { name = "ars", url = "https://feeds.arstechnica.com/arstechnica/index", cat = "tech" },
+  { name = "wired", url = "https://www.wired.com/feed/rss", cat = "tech" },
+  { name = "register", url = "https://www.theregister.com/headlines.atom", cat = "tech" },
+]
+
+[Europe]
+feeds = [
+  { name = "euronews", url = "https://www.euronews.com/rss?format=xml" },
+  { name = "bbc-eu", url = "http://feeds.bbci.co.uk/news/world/europe/rss.xml" },
+  { name = "politico-eu", url = "https://www.politico.eu/feed/" },
+  { name = "guardian-eu", url = "https://www.theguardian.com/world/europe-news/rss" },
+  { name = "guardian-biz", url = "https://www.theguardian.com/business/rss", cat = "finance" },
+]
+
+[Asia]
+feeds = [
+  { name = "scmp", url = "https://www.scmp.com/rss/91/feed" },
+  { name = "cna", url = "https://www.channelnewsasia.com/rssfeeds/8395744" },
+  { name = "diplomat", url = "https://thediplomat.com/feed/" },
+  { name = "japantimes", url = "https://www.japantimes.co.jp/feed/" },
+]
+
+[Post-Soviet]
+feeds = [
+  { name = "rferl", url = "https://www.rferl.org/api/" },
+  { name = "ukrinform", url = "https://www.ukrinform.net/rss/block-lastnews" },
+  { name = "eurasianet", url = "https://eurasianet.org/rss" },
+  { name = "kyivindep", url = "https://kyivindependent.com/news-archive/rss/" },
+  { name = "moscowtimes", url = "https://www.themoscowtimes.com/rss/news" },
+  { name = "meduza", url = "https://meduza.io/rss/en/all" },
+]
+
+[Africa]
+feeds = [
+  { name = "allafrica", url = "https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf" },
+  { name = "bbc-africa", url = "http://feeds.bbci.co.uk/news/world/africa/rss.xml" },
+  { name = "africareport", url = "https://www.theafricareport.com/feed/" },
+  { name = "africanews", url = "https://www.africanews.com/feed/rss" },
+]
