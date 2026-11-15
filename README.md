@@ -1,6 +1,6 @@
 # newsdigest
 
-A [Claude Code](https://claude.com/claude-code) skill that turns a week of RSS headlines into a one-page, printable newspaper.
+An agent skill that turns a week of RSS headlines into a one-page, printable newspaper. It works with any AI agent that can run shell commands: the agent only reads text and picks stories against your interests, so a small, cheap model is enough.
 
 Reading the news every day eats time. This skill lets a script collect headlines in the background, lets an AI pick the few stories that matter to you, and gives you **one digest per week**: regions as pages, and politics, finance and tech as columns.
 
@@ -32,20 +32,20 @@ Design rules that keep it cheap and safe:
 - Python 3.11+ (uses `tomllib`)
 - `pip install feedparser`
 - Optional: `pip install trafilatura` for better article text in `read_article.py` (a simple built-in extractor is used otherwise)
-- Claude Code
+- Any AI agent that can read files and run shell commands
 
 ## Setup
 
 1. Clone the repo anywhere, for example `~/projects/newsdigest`.
 2. Install the dependency: `pip install feedparser`.
-3. Make Claude Code see the skill by linking the folder:
+3. Make your agent see the skill: put or link the folder where your agent loads skills from, or point the agent at `SKILL.md`. For example:
    ```
    ln -s ~/projects/newsdigest ~/.claude/skills/newsdigest
    ```
 4. Digests are written to `digests/<week>.html` inside the project folder. To save them elsewhere (a notes vault, a synced folder), change the `-o` path in the render step of `SKILL.md`.
 5. Create your interests file: `cp interests.example.md interests.md`, then edit it (see *Change your interests* below). `interests.md` is ignored by git, so your preferences stay private.
 6. Test the fetcher: `python3 fetch.py fetch -v` prints one line per feed.
-7. In Claude Code, say: *"make the weekly news digest"* (or `/newsdigest`).
+7. Ask your agent: *"make the weekly news digest"*, or have it follow `SKILL.md`.
 
 Run the skill once a week, on Sunday or later. `export` picks the right week by itself: the current week on Sunday, otherwise the last finished one.
 
@@ -101,7 +101,7 @@ RSS feeds only keep the latest items. A busy feed may hold just 5–10 hours of 
 
 ### Linux (systemd user timer)
 
-The `systemd/` folder has a ready service and timer. They run the script through the symlink from the setup step, `~/.claude/skills/newsdigest/`, so it works wherever you cloned the repo.
+The `systemd/` folder has a ready service and timer. The service runs `~/.claude/skills/newsdigest/fetch.py` (the example link from the setup step). If your skill folder is elsewhere, change the `ExecStart` path in `newsdigest-fetch.service`.
 
 ```
 mkdir -p ~/.config/systemd/user
