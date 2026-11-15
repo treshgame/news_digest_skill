@@ -22,12 +22,12 @@ Project folder: `~/.claude/skills/newsdigest/` (this skill's own folder). Run ev
    ```
    `export` picks the right week by itself, usually the last finished one. Remember the week it prints, e.g. `2026-W45`.
 2. Read `interests.md` (if it does not exist, read `interests.example.md` and tell the user to copy it), then `data/week.txt`. Lines are `id|source[/category hint]|title`, grouped under `## Region`.
-3. Pick about **10 candidates per region** from the titles alone, then see their descriptions in one call:
+3. Pick about **8 candidates per category in each region** from the titles alone, then see their descriptions in one call:
    ```
    python3 fetch.py show a3f9c1 b71c02 ...
    ```
 4. Optional: `python3 read_article.py <id>`, only if a chosen story cannot be explained from its description. The script stops you after 10.
-5. Choose the final **5-6 stories per region** and add them all in one call. The format is `id|category|title|explanation`. Leave the title empty to keep the feed's title. Always use exactly this quoted `<<'EOF'` form, so that `$` in the text stays intact:
+5. Choose the final stories, **up to 6 per category in each region**, and add them all in one call. The format is `id|category|title|explanation`. Leave the title empty to keep the feed's title. Always use exactly this quoted `<<'EOF'` form, so that `$` in the text stays intact:
    ```
    python3 addnews.py <<'EOF'
    a3f9c1|finance||The Fed left rates unchanged at 4%, delaying cheaper loans.

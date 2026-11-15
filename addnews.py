@@ -15,7 +15,7 @@ import collections
 import json
 import sys
 
-from common import (CATEGORIES, MAX_EXPLANATION_CHARS, MAX_STORIES_PER_REGION, atomic_write, digest_path,
+from common import (CATEGORIES, MAX_EXPLANATION_CHARS, MAX_STORIES_PER_CATEGORY, atomic_write, digest_path,
                     fail, load_feeds, load_week)
 
 
@@ -34,7 +34,7 @@ def stats_line(stories: list[dict]) -> str:
         count = collections.Counter(s["category"] for s in stories if s["region"] == region)
         detail = " ".join(f"{c[0]}{count[c]}" for c in CATEGORIES)  # p2 f1 t3
         parts.append(f"{region}={sum(count.values())} ({detail})")
-    return f"{', '.join(parts)}; total={len(stories)}, max {MAX_STORIES_PER_REGION} per region"
+    return f"{', '.join(parts)}; total={len(stories)}, max {MAX_STORIES_PER_CATEGORY} per category in a region"
 
 
 def parse_line(line: str) -> tuple[str, str, str, str]:
@@ -59,8 +59,8 @@ def add_story(line: str, stories: list[dict], items: dict) -> str:
     if any(s["id"] == story_id for s in stories):
         return "skipped"
     item = items[story_id]
-    if sum(s["region"] == item["region"] for s in stories) >= MAX_STORIES_PER_REGION:
-        raise ValueError(f"{item['region']} already has {MAX_STORIES_PER_REGION} stories; "
+    if sum(s["region"] == item["region"] and s["category"] == category for s in stories) >= MAX_STORIES_PER_CATEGORY:
+        raise ValueError(f"{item['region']} already has {MAX_STORIES_PER_CATEGORY} {category} stories; "
                          "drop this one or use --remove first")
     stories.append({"id": story_id, "region": item["region"], "date": item["date"], "category": category,
                     "title": title or item["title"], "explanation": explanation, "link": item["link"]})

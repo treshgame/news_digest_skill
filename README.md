@@ -23,9 +23,9 @@ fetch.py clean      drop the processed week from the store
 Design rules that keep it cheap and safe:
 
 - **Scripts do the mechanical work.** The AI never searches the web, never writes JSON or HTML, and refers to stories by a 6-character id.
-- **Few tokens.** The AI sees titles only at first (at most 3 items per feed per day), then descriptions for about 10 candidates per region. Weak, cheap models work fine.
+- **Few tokens.** The AI sees titles only at first (at most 3 items per feed per day), then descriptions for about 8 candidates per category in each region. Weak, cheap models work fine.
 - **Feed text is untrusted.** `SKILL.md` tells the model to ignore any instructions found inside headlines or articles.
-- **Output:** up to 6 stories per region, explanations of at most 180 characters. Print it on A4: one region per page.
+- **Output:** up to 6 stories per category in each region, explanations of at most 180 characters. Print it on A4: each region starts a new page (a full region may take more than one).
 
 ## Requirements
 

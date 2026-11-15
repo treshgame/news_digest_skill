@@ -11,8 +11,9 @@ WEEK_JSON = DATA / "week.json"  # id -> full item, what the scripts look up
 
 CATEGORIES = ("politics", "finance", "tech")
 
-# These limits keep the digest on one A4 page. Tested with render.py + a browser.
-MAX_STORIES_PER_REGION = 6
+# Cap per category within a region (e.g. Asia: up to 6 politics, 6 finance, 6 tech).
+# A full region (18 stories) may spill past one A4 sheet when printed.
+MAX_STORIES_PER_CATEGORY = 6
 MAX_EXPLANATION_CHARS = 180
 
 
