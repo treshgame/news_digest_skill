@@ -2,7 +2,7 @@
 
 An agent skill that turns a week of RSS headlines into a one-page, printable newspaper. It works with any AI agent that can run shell commands: the agent only reads text and picks stories against your interests, so a small, cheap model is enough.
 
-Reading the news every day eats time. This skill lets a script collect headlines in the background, lets an AI pick the few stories that matter to you, and gives you **one digest per week**: regions as pages, and politics, finance and tech as columns.
+Reading the news every day eats time. This skill lets a script collect headlines in the background, lets an AI pick the few stories that matter to you, and gives you **one digest per week**: regions as pages, and categories as columns.
 
 ## How it works
 
@@ -45,7 +45,7 @@ Design rules that keep it cheap and safe:
 4. Digests are written to `digests/<week>.html` inside the project folder. To save them elsewhere (a notes vault, a synced folder), change the `-o` path in the render step of `SKILL.md`.
 5. Create your interests file: `cp interests.example.md interests.md`, then edit it (see *Change your interests* below). `interests.md` is ignored by git, so your preferences stay private.
 6. Test the fetcher: `python3 fetch.py fetch -v` prints one line per feed.
-7. Ask your agent: *"make the weekly news digest"*, or have it follow `SKILL.md`.
+7. Ask your agent: *"make the weekly news digest"*, or have it follow `SKILL.md`. Pass `--keep` (e.g. `/newsdigest --keep` in Claude Code) to keep the fetched news in the store after the digest is made, instead of running `fetch.py clean`.
 
 Run the skill once a week, on Sunday or later. `export` picks the right week by itself: the current week on Sunday, otherwise the last finished one.
 

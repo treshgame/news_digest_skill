@@ -1,11 +1,18 @@
 ---
 name: newsdigest
 description: Build the weekly one-page news digest (politics, finance, tech by region) from locally fetched RSS items. Use when the user asks for the weekly news digest or "newsdigest".
+argument-hint: "[--keep]"
 ---
 
 # Weekly news digest
 
 Project folder: `~/.claude/skills/newsdigest/` (this skill's own folder). Run every command from there.
+
+## Parameters
+
+Arguments: `$ARGUMENTS`
+
+- `--keep`: keep the fetched news in the store after the digest is made, i.e. skip step 8 (`fetch.py clean`). Also applies when the user asks in words to keep the fetched news. Without it, clean as usual.
 
 ## Hard rules
 
@@ -41,8 +48,8 @@ Project folder: `~/.claude/skills/newsdigest/` (this skill's own folder). Run ev
    ```
    python3 render.py data/digest-<week>.json -o digests/<week>.html
    ```
-8. Only after the render succeeds: `python3 fetch.py clean --week <week>`.
-9. Report the output path and the final stats line.
+8. Only after the render succeeds, and only without `--keep`: `python3 fetch.py clean --week <week>`.
+9. Report the output path and the final stats line. With `--keep`, also say the fetched news were kept.
 
 ## Selection rules
 
