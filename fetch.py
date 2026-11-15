@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Incremental RSS fetcher for the weekly news digest.
+"""Incremental RSS fetcher for the news digest.
 
-  fetch.py fetch [-v]              fetch what is new since the last successful fetch of each feed
-  fetch.py export [--week W]       write data/week.txt (titles, for the AI) and data/week.json
-  fetch.py show ID [ID ...]        print date and description for the shortlisted ids
-  fetch.py clean [--week W]        delete that week's and older items, and the temp files
+  fetch.py fetch [-v]                          fetch what is new since the last successful fetch of each feed
+  fetch.py export [--days N [--today]]        write data/period.txt (titles, for the AI) and data/period.json
+  fetch.py show ID [ID ...]                    print date and description for the shortlisted ids
+  fetch.py clean [--keep]                      delete the exported items (--keep: only mark them as digested)
 
-Default week: the current ISO week on Sunday, otherwise the last finished one.
+export without flags: every stored item not yet in a digest, up to this moment (today included).
+export --days N: the last N whole UTC days up to yesterday; with --today, up to and including today.
 Store: data/items.jsonl (all fetched items), data/state.json (last successful fetch per feed).
 """
 import argparse
@@ -19,11 +20,12 @@ import re
 import socket
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import feedparser
 
-from common import DATA, WEEK_JSON, WEEK_TXT, atomic_write, digest_path, fail, load_feeds, load_week
+from common import (DATA, MAX_STORIES_PER_CATEGORY_PER_DAY, PERIOD_JSON, PERIOD_TXT, atomic_write, digest_path,
+                    fail, load_feeds, load_period, period_id)
 
 ITEMS = DATA / "items.jsonl"
 STATE = DATA / "state.json"
@@ -69,15 +71,39 @@ def iso_day(ts: int) -> str:
     return utc(ts).strftime("%Y-%m-%d")
 
 
-def format_week(moment: datetime) -> str:
-    year, week, _ = moment.isocalendar()
-    return f"{year}-W{week:02d}"
+def item_day(item: dict) -> date:
+    return utc(item["ts"]).date()
 
 
-def default_week() -> str:
-    """The week to digest: this one on Sunday, otherwise the last finished one."""
-    now = datetime.now(timezone.utc)
-    return format_week(now if now.isoweekday() == 7 else now - timedelta(days=7))
+def days_window(args) -> tuple[date, date]:
+    """First and last day of --days N: up to yesterday, or up to today with --today."""
+    last = datetime.now(timezone.utc).date() - timedelta(days=0 if args.today else 1)
+    return last - timedelta(days=args.days - 1), last
+
+
+def select_items(args, stored: list[dict]) -> list[dict]:
+    """The items to export: the chosen days, or everything not yet in a digest."""
+    if args.days:
+        first, last = days_window(args)
+        chosen = [i for i in stored if first <= item_day(i) <= last]
+        if not chosen:
+            fail(f"no items from {first} to {last}")
+        return chosen
+    chosen = [i for i in stored if not i.get("done")]
+    if not chosen:
+        fail("nothing new to digest: every stored item is already in a digest. Run `python3 fetch.py fetch` "
+             "later, or pick days with --days N")
+    return chosen
+
+
+def unique_period_id(first: date, last: date) -> str:
+    """Period id for these days; a second digest of the same days gets a -2, -3... suffix."""
+    base = period_id(first, last)
+    period, number = base, 1
+    while digest_path(period).exists():
+        number += 1
+        period = f"{base}-{number}"
+    return period
 
 
 def load_items() -> dict[str, dict]:
@@ -93,6 +119,13 @@ def save_items(items: dict[str, dict]) -> None:
 
 def load_state() -> dict:
     return json.loads(STATE.read_text()) if STATE.exists() else {"feeds": {}}
+
+
+def positive_int(text: str) -> int:
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be 1 or more")
+    return value
 
 
 def field(text: str) -> str:
@@ -157,7 +190,7 @@ def cmd_fetch(args) -> int:
 # ---------- export / show ----------
 
 def cap_per_feed_per_day(items: list[dict], cap: int) -> list[dict]:
-    """Keep each feed's newest `cap` items of every day, so a busy feed can't crowd out the week."""
+    """Keep each feed's newest `cap` items of every day, so a busy feed can't crowd out the others."""
     seen = collections.Counter()
     kept = []
     for item in sorted(items, key=lambda i: -i["ts"]):
@@ -169,32 +202,41 @@ def cap_per_feed_per_day(items: list[dict], cap: int) -> list[dict]:
 
 
 def cmd_export(args) -> int:
-    week = args.week or default_week()
     regions = list(load_feeds())
-    in_week = [i for i in load_items().values() if format_week(utc(i["ts"])) == week and i["region"] in regions]
-    if not in_week:
-        fail(f"no items for {week}")
-    kept = cap_per_feed_per_day(in_week, args.cap)
+    stored = [i for i in load_items().values() if i["region"] in regions]
+    in_period = select_items(args, stored)
+    if args.days:  # the period is the days asked for, even if some of them are empty
+        first, last = days_window(args)
+    else:  # the days the not-yet-digested items span
+        first, last = min(item_day(i) for i in in_period), max(item_day(i) for i in in_period)
+    period, days = unique_period_id(first, last), (last - first).days + 1
+    story_cap = MAX_STORIES_PER_CATEGORY_PER_DAY * days
+    kept = cap_per_feed_per_day(in_period, args.cap)
 
-    lines = [f"# week {week}", "# id|source[/category hint]|title"]
+    span = f"{days} day{'s' if days > 1 else ''}"
+    lines = [f"# period {period} ({span}), up to {story_cap} stories per category in each region",
+             "# id|source[/category hint]|title"]
     for region in regions:
         lines.append(f"## {region}")
         for item in (i for i in kept if i["region"] == region):
             source = item["source"] + (f"/{item['cat']}" if item.get("cat") else "")
             lines.append(f"{item['id']}|{source}|{field(item['title'])}")
     text = "\n".join(lines) + "\n"
-    atomic_write(WEEK_TXT, text)
+    atomic_write(PERIOD_TXT, text)
 
     index = {i["id"]: {"region": i["region"], "date": iso_day(i["ts"]), "source": i["source"],
                        "title": i["title"], "desc": i["desc"], "link": i["link"]} for i in kept}
-    atomic_write(WEEK_JSON, json.dumps({"week": week, "items": index}, ensure_ascii=False))
+    # "covered" lists every item of the period, also those the per-feed cap left out, so `clean` retires them all.
+    atomic_write(PERIOD_JSON, json.dumps({"period": period, "days": days, "cap": story_cap, "items": index,
+                                          "covered": [i["id"] for i in in_period]}, ensure_ascii=False))
     (DATA / "articles_read.txt").unlink(missing_ok=True)
-    print(f"exported {len(kept)} of {len(in_week)} items for {week}: ~{len(text) // 4} tokens")
+    print(f"exported {len(kept)} of {len(in_period)} items for period {period} ({span}): "
+          f"~{len(text) // 4} tokens; cap {story_cap} stories per category in each region")
     return 0
 
 
 def cmd_show(args) -> int:
-    items = load_week()["items"]
+    items = load_period()["items"]
     unknown = [i for i in args.ids if i not in items]
     if unknown:
         print(f"unknown ids skipped: {' '.join(unknown)}", file=sys.stderr)
@@ -212,15 +254,29 @@ def cmd_show(args) -> int:
 # ---------- clean ----------
 
 def cmd_clean(args) -> int:
-    week = args.week or default_week()
-    if not digest_path(week).exists():
-        fail(f"no digest for {week} yet; cleaning would lose the week's items")
+    """Retire the exported items, so the next export without flags starts after them."""
+    exported = load_period()
+    period = exported["period"]
+    if not digest_path(period).exists():
+        fail(f"no digest for {period} yet; cleaning would lose the period's items")
+    covered = set(exported.get("covered", exported["items"]))
     items = load_items()
-    keep = {k: v for k, v in items.items() if format_week(utc(v["ts"])) > week}  # YYYY-Www sorts by time
-    save_items(keep)
-    for path in (WEEK_TXT, WEEK_JSON, DATA / "articles_read.txt"):
+    for item_id in covered & items.keys():
+        items[item_id]["done"] = True
+    if args.keep:
+        result = f"marked {len(covered & items.keys())} items of {period} as digested and kept them"
+    else:
+        # A digested item still inside a feed's re-fetch window must stay, or the next fetch would add it again.
+        last_fetches = [load_state()["feeds"].get(f["url"], 0) for fs in load_feeds().values() for f in fs]
+        safe_before = min(last_fetches, default=0) - OVERLAP_SECONDS
+        left = {k: v for k, v in items.items() if not (v.get("done") and v["ts"] < safe_before)}
+        result = (f"digested {len(covered)} items of {period}; removed {len(items) - len(left)} digested items, "
+                  f"{sum(1 for v in left.values() if v.get('done'))} recent ones stay until the next clean")
+        items = left
+    save_items(items)
+    for path in (PERIOD_TXT, PERIOD_JSON, DATA / "articles_read.txt"):
         path.unlink(missing_ok=True)
-    print(f"removed {len(items) - len(keep)} items up to {week}; {len(keep)} left")
+    print(result)
     return 0
 
 
@@ -233,7 +289,9 @@ def main() -> int:
     p.set_defaults(fn=cmd_fetch)
 
     p = commands.add_parser("export")
-    p.add_argument("--week", help="ISO week, e.g. 2026-W45")
+    p.add_argument("--days", type=positive_int,
+                   help="the last N whole days up to yesterday (default: everything not yet digested, up to now)")
+    p.add_argument("--today", action="store_true", help="with --days: count up to and including today")
     p.add_argument("--cap", type=int, default=DEFAULT_CAP_PER_FEED_PER_DAY, help="max items per feed per day")
     p.set_defaults(fn=cmd_export)
 
@@ -242,10 +300,12 @@ def main() -> int:
     p.set_defaults(fn=cmd_show)
 
     p = commands.add_parser("clean")
-    p.add_argument("--week", help="ISO week, e.g. 2026-W45")
+    p.add_argument("--keep", action="store_true", help="keep the items, only mark them as digested")
     p.set_defaults(fn=cmd_clean)
 
     args = parser.parse_args()
+    if getattr(args, "today", False) and not args.days:
+        parser.error("--today goes with --days N; without --days the export already runs up to now")
     return args.fn(args)
 
 

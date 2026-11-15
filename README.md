@@ -1,31 +1,31 @@
 # newsdigest
 
-An agent skill that turns a week of RSS headlines into a one-page, printable newspaper. It works with any AI agent that can run shell commands: the agent only reads text and picks stories against your interests, so a small, cheap model is enough.
+An agent skill that turns RSS headlines into a one-page, printable newspaper, as often as you like: daily, every few days or weekly. It works with any AI agent that can run shell commands: the agent only reads text and picks stories against your interests, so a small, cheap model is enough.
 
-Reading the news every day eats time. This skill lets a script collect headlines in the background, lets an AI pick the few stories that matter to you, and gives you **one digest per week**: regions as pages, and categories as columns.
+Reading the news all day eats time. This skill lets a script collect headlines in the background, lets an AI pick the few stories that matter to you, and gives you **one digest with everything fetched since the last one**: regions as pages, and categories as columns.
 
 ## How it works
 
 ```
 fetch.py fetch      RSS feeds ──► local store (incremental, several times a day)
-fetch.py export     store ──► data/week.txt (titles only, cheap to read)
+fetch.py export     store ──► data/period.txt (titles only, cheap to read)
         │
-        ▼  the AI reads interests.md + week.txt and shortlists stories
+        ▼  the AI reads interests.md + period.txt and shortlists stories
 fetch.py show       descriptions of the shortlisted stories
 read_article.py     (rare) full text of an article, capped
 addnews.py          the AI saves its picks: id | category | explanation
         │
         ▼
 render.py           digest JSON + template.html ──► one HTML file
-fetch.py clean      drop the processed week from the store
+fetch.py clean      mark the digested items, so the next digest starts after them
 ```
 
 Design rules that keep it cheap and safe:
 
 - **Scripts do the mechanical work.** The AI never searches the web, never writes JSON or HTML, and refers to stories by a 6-character id.
-- **Few tokens.** The AI sees titles only at first (at most 3 items per feed per day), then descriptions for about 8 candidates per category in each region. Weak, cheap models work fine.
+- **Few tokens.** The AI sees titles only at first (at most 3 items per feed per day), then descriptions for about 1.5× the story cap per category in each region. Weak, cheap models work fine.
 - **Feed text is untrusted.** `SKILL.md` tells the model to ignore any instructions found inside headlines or articles.
-- **Output:** up to 6 stories per category in each region, explanations of at most 180 characters. Print it on A4: each region starts a new page (a full region may take more than one).
+- **Output:** up to 5 stories per category in each region **per day** of the period, explanations of at most 180 characters. Print it on A4: each region starts a new page (a full region may take more than one).
 
 ## Requirements
 
@@ -42,12 +42,35 @@ Design rules that keep it cheap and safe:
    ```
    ln -s ~/projects/newsdigest ~/.claude/skills/newsdigest
    ```
-4. Digests are written to `digests/<week>.html` inside the project folder. To save them elsewhere (a notes vault, a synced folder), change the `-o` path in the render step of `SKILL.md`.
+4. Digests are written to `digests/<period>.html` inside the project folder (e.g. `digests/2026-11-14.html` for one day, `digests/2026-11-08_2026-11-14.html` for a week; a second digest of the same days gets a `-2` suffix). To save them elsewhere (a notes vault, a synced folder), change the `-o` path in the render step of `SKILL.md`.
 5. Create your interests file: `cp interests.example.md interests.md`, then edit it (see *Change your interests* below). `interests.md` is ignored by git, so your preferences stay private.
 6. Test the fetcher: `python3 fetch.py fetch -v` prints one line per feed.
-7. Ask your agent: *"make the weekly news digest"*, or have it follow `SKILL.md`. Pass `--keep` (e.g. `/newsdigest --keep` in Claude Code) to keep the fetched news in the store after the digest is made, instead of running `fetch.py clean`.
+7. Ask your agent: *"make the news digest"*, or have it follow `SKILL.md`. Arguments (e.g. `/newsdigest --days 3 --today` in Claude Code, or in words like *"news for the last 3 days"*):
+   - none: everything fetched up to this moment that is not in a digest yet (see below).
+   - `--days N`: only the last N whole days, up to yesterday.
+   - `--days N --today`: the last N days up to and including today (`--days 1 --today` is today only).
+   - `--keep`: keep the digested news in the store instead of deleting them; they are still marked as digested, so the next run without arguments skips them.
 
-Run the skill once a week, on Sunday or later. `export` picks the right week by itself: the current week on Sunday, otherwise the last finished one.
+## How often to run it
+
+As often as suits you. Without arguments, a digest takes **everything fetched up to that moment that is not in a digest yet**, today included. After each digest, `fetch.py clean` marks its news as digested, so the next one starts where this one stopped: nothing is skipped and nothing appears twice, whether you run it every evening, twice a week or after a month away.
+
+A long gap makes a long digest, on purpose. The AI's job is to keep out what doesn't matter to you (see *Change your interests*), not to squeeze the period into a fixed size.
+
+The limit grows with the period: up to **5 stories per category, per region, per day** the digest covers (`MAX_STORIES_PER_CATEGORY_PER_DAY` in `common.py`):
+
+| The digest covers | Cap per category in each region |
+|---|---|
+| 1 day | 5 |
+| 2 days | 10 |
+| 4 days | 20 |
+| 7 days | 35 |
+
+The cap is a ceiling, not a target: the AI only adds stories that are worth it.
+
+To look at specific days instead, use `--days N` (the last N whole days, up to yesterday) or `--days N --today` (up to now). These take every stored item of those days, digested or not.
+
+The very first digest starts at the oldest stored item: the first fetch looks about a week back (`FIRST_RUN_DAYS` in `fetch.py`).
 
 ## Change your interests
 
@@ -86,7 +109,7 @@ If you add a region, check that categories still make sense: the digest always u
 
 ### What makes a good source
 
-- **RSS or Atom with publication dates.** Items without dates cannot be placed in a week, so they are useless here. (This is why Nikkei was dropped.)
+- **RSS or Atom with publication dates.** Items without dates cannot be placed on a day, so they are useless here. (This is why Nikkei was dropped.)
 - **Descriptions in the feed.** The AI explains a story from the feed's summary. Feeds with an empty or truncated description produce weaker results.
 - **English.** The explanations are written in English from the source text.
 - **Reputable, regularly updated, one topic or region per feed.** Section feeds (`/politics`, `/business`) are better than one giant "all news" feed, because the cap is per feed.
@@ -95,7 +118,7 @@ If you add a region, check that categories still make sense: the digest always u
 
 ## Fetch several times a day
 
-RSS feeds only keep the latest items. A busy feed may hold just 5–10 hours of news, so fetching once a week loses almost everything. The fetcher is **incremental** and keeps per-feed state, so it is safe and cheap to run often.
+RSS feeds only keep the latest items. A busy feed may hold just 5–10 hours of news, so fetching only when you make a digest loses almost everything. The fetcher is **incremental** and keeps per-feed state, so it is safe and cheap to run often.
 
 **Recommendation: every 4 hours, plus shortly after boot** (if the computer is off at night, the boot run catches up on whatever the feeds still hold).
 
@@ -130,26 +153,28 @@ On macOS use `launchd`, on Windows Task Scheduler, with the same command: `pytho
 
 ### What gets stored
 
-Everything lives in `data/` (ignored by git): fetched items per feed, `week.txt` / `week.json` for the AI, and one `digest-<week>.json` per finished digest. Delete the folder to start fresh.
+Everything lives in `data/` (ignored by git): fetched items (with a `done` mark once digested), `period.txt` / `period.json` for the AI, and one `digest-<period>.json` per finished digest. Delete the folder to start fresh.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `python3 fetch.py fetch [-v]` | Download new items from all feeds |
-| `python3 fetch.py export [--week W] [--cap N]` | Write `data/week.txt` and `week.json` |
+| `python3 fetch.py export [--days N [--today]] [--cap N]` | Write `data/period.txt` and `period.json`. Default: every item not yet digested, up to now |
 | `python3 fetch.py show ID...` | Print descriptions for the given ids |
-| `python3 fetch.py clean --week W` | Remove that week and older from the store |
+| `python3 fetch.py clean [--keep]` | Mark the exported items as digested and delete them (`--keep`: only mark) |
 | `python3 addnews.py` | Save picks from stdin: `id\|category\|title\|explanation` |
 | `python3 addnews.py --stats` | Show counts per region and category |
-| `python3 render.py data/digest-W.json -o out.html` | Render the digest (`--template` for another design) |
+| `python3 render.py data/digest-P.json -o out.html` | Render the digest (`--template` for another design) |
 | `python3 read_article.py ID` | Fetch article text (max 10 per run) |
 
 ## Customising the look
 
-`template.html` is a plain HTML/CSS file with three placeholders: `{{WEEK}}`, `{{RANGE}}` and `{{BODY}}`. Edit it, or write your own and pass it with `render.py --template`. The default prints as one A4 page per region.
+`template.html` is a plain HTML/CSS file with two placeholders: `{{PERIOD}}` (e.g. *Sun 8 Nov – Sat 14 Nov 2026 · 7 days*) and `{{BODY}}`. Edit it, or write your own and pass it with `render.py --template`. The default prints as one A4 page per region.
 
 ## Limits
 
 - Regions come from the feed, not from the story's content, so an occasional story lands in an odd region.
 - The per-feed daily cap (3 items) can hide a big story on a very busy day. Raise it with `export --cap N` at the cost of more tokens.
+- Days are UTC days, so a story published late in the evening in the Americas may count as the next day.
+- Digested items are deleted only once they are older than the fetcher's 6-hour re-read window, so very recent ones stay (marked) until a later `clean`. Otherwise the next fetch would add them again.

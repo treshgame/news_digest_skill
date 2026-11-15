@@ -1,5 +1,5 @@
 [Unit]
-Description=Fetch new items for the weekly news digest
+Description=Fetch new items for the news digest
 
 [Service]
 Type=oneshot

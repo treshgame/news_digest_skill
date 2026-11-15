@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Weekly Digest · {{WEEK}}</title>
+<title>The News Digest · {{PERIOD}}</title>
 <style>
   /* One region = one page: a full-screen sheet on screen, one A4 sheet in print.
      All sizes are in rem, so changing html's font-size in @media print scales the whole page. */
@@ -13,7 +13,7 @@
   body { margin:0; background:var(--paper); color:var(--ink); line-height:1.3;
          font-family: Georgia, "Times New Roman", "DejaVu Serif", serif; }
 
-  /* Masthead stays visible while you scroll, so every page shows which week it is. */
+  /* Masthead stays visible while you scroll, so every page shows which days it covers. */
   header { position: sticky; top:0; z-index:1; height:var(--bar); background:var(--paper);
            display:flex; align-items:baseline; justify-content:space-between; gap:1rem;
            padding: .5rem 1.5rem 0; border-bottom: 4px double var(--ink); }
@@ -58,8 +58,8 @@
 </head>
 <body>
   <header>
-    <h1>The Weekly Digest</h1>
-    <div class="sub">{{WEEK}} · {{RANGE}}</div>
+    <h1>The News Digest</h1>
+    <div class="sub">{{PERIOD}}</div>
   </header>
   <main>{{BODY}}</main>
 </body>

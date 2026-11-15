@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print the plain text of ONE article by id, truncated. Limited to MAX_ARTICLES per exported week.
+"""Print the plain text of ONE article by id, truncated. Limited to MAX_ARTICLES per export.
 
   read_article.py a3f9c1
 
@@ -11,7 +11,7 @@ import sys
 import urllib.request
 from html import unescape
 
-from common import DATA, fail, load_week
+from common import DATA, fail, load_period
 
 MAX_ARTICLES = 10
 MAX_CHARS = 2500
@@ -42,7 +42,7 @@ def main() -> int:
     if len(sys.argv) != 2:
         fail("usage: read_article.py ID")
     article_id = sys.argv[1]
-    items = load_week()["items"]
+    items = load_period()["items"]
     if article_id not in items:
         fail(f"unknown id {article_id}")
 

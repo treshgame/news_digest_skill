@@ -1,25 +1,32 @@
 #!/usr/bin/env python3
 """Render a digest JSON into one printable HTML page.
 
-  render.py data/digest-2026-W45.json -o digests/2026-W45.html
+  render.py data/digest-2026-11-08_2026-11-14.json -o digests/2026-11-08_2026-11-14.html
   render.py ... --template other.html    (default: template.html)
 
 Without -o the page goes to stdout.
 """
 import argparse
 import json
-import re
 import sys
 from datetime import date
 from html import escape
 from pathlib import Path
 
-from common import CATEGORIES, ROOT, load_feeds
+from common import CATEGORIES, ROOT, fail, load_feeds, period_bounds
 
 
-def format_day(iso: str) -> str:
-    day = date.fromisoformat(iso)
+def format_day(day: date | str) -> str:
+    day = date.fromisoformat(day) if isinstance(day, str) else day
     return f"{day.strftime('%a')} {day.day} {day.strftime('%b')}"
+
+
+def format_period(first: date, last: date) -> str:
+    """"Sat 14 Nov 2026" for one day, "Sun 8 Nov – Sat 14 Nov 2026 · 7 days" for several."""
+    if first == last:
+        return f"{format_day(last)} {last.year}"
+    start = format_day(first) + (f" {first.year}" if first.year != last.year else "")
+    return f"{start} – {format_day(last)} {last.year} · {(last - first).days + 1} days"
 
 
 def render_story(story: dict) -> str:
@@ -45,17 +52,20 @@ def main() -> int:
     parser.add_argument("--template", default="template.html", help="template file in the project folder")
     args = parser.parse_args()
 
-    stories = json.loads(Path(args.json_path).read_text())
-    match = re.search(r"(\d{4})-W(\d{2})\.json$", args.json_path)
-    week_label = f"Week {int(match.group(2))}, {match.group(1)}" if match else "Weekly digest"
-    days = sorted(s["date"] for s in stories)
-    date_range = f"{format_day(days[0])} – {format_day(days[-1])}" if days else ""
+    path = Path(args.json_path)
+    stories = json.loads(path.read_text())
+    try:
+        period_label = format_period(*period_bounds(path.stem.removeprefix("digest-")))
+    except ValueError:
+        days = sorted(s["date"] for s in stories)  # renamed file: fall back to the stories' dates
+        period_label = format_period(date.fromisoformat(days[0]), date.fromisoformat(days[-1])) if days else ""
+    if not stories:
+        fail("the digest has no stories")
 
     regions = (render_region(r, [s for s in stories if s["region"] == r]) for r in load_feeds()
                if any(s["region"] == r for s in stories))
     page = ((ROOT / args.template).read_text()
-            .replace("{{WEEK}}", escape(week_label))
-            .replace("{{RANGE}}", escape(date_range))
+            .replace("{{PERIOD}}", escape(period_label))
             .replace("{{BODY}}", "".join(regions)))
 
     if args.output:

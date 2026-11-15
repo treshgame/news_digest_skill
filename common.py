@@ -1,19 +1,21 @@
 """Paths, limits and file helpers shared by the digest scripts."""
 import json
+import re
 import sys
 import tomllib
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
-WEEK_TXT = DATA / "week.txt"    # titles only, what the AI reads first
-WEEK_JSON = DATA / "week.json"  # id -> full item, what the scripts look up
+PERIOD_TXT = DATA / "period.txt"    # titles only, what the AI reads first
+PERIOD_JSON = DATA / "period.json"  # id -> full item, what the scripts look up
 
 CATEGORIES = ("politics", "finance", "tech")
 
-# Cap per category within a region (e.g. Asia: up to 6 politics, 6 finance, 6 tech).
-# A full region (18 stories) may spill past one A4 sheet when printed.
-MAX_STORIES_PER_CATEGORY = 6
+# Cap per category within a region, per day of the period: a 1-day digest allows up to 5 politics,
+# 5 finance and 5 tech stories in each region, a 7-day digest up to 35 of each.
+MAX_STORIES_PER_CATEGORY_PER_DAY = 5
 MAX_EXPLANATION_CHARS = 180
 
 
@@ -40,12 +42,37 @@ def load_feeds() -> dict[str, list[dict]]:
     return feeds
 
 
-def load_week() -> dict:
-    """Return the exported week: {"week": "2026-W45", "items": {id: item}}."""
-    if not WEEK_JSON.exists():
-        fail("no exported week; run `python3 fetch.py export` first")
-    return json.loads(WEEK_JSON.read_text())
+# ---------- periods ----------
+# A period is the run of UTC days a digest covers. Its id is "2026-11-14" for one day,
+# "2026-11-08_2026-11-14" for several; a second digest of the same days gets "-2", "-3"...
+# Old weekly ids ("2026-W45") are still understood.
+
+def period_id(first: date, last: date) -> str:
+    return first.isoformat() if first == last else f"{first.isoformat()}_{last.isoformat()}"
 
 
-def digest_path(week: str) -> Path:
-    return DATA / f"digest-{week}.json"
+def period_bounds(period: str) -> tuple[date, date]:
+    """Return (first day, last day) of a period id; raise ValueError if it is not one."""
+    week = re.fullmatch(r"(\d{4})-W(\d{2})", period)
+    if week:
+        year, number = int(week.group(1)), int(week.group(2))
+        return date.fromisocalendar(year, number, 1), date.fromisocalendar(year, number, 7)
+    days = re.fullmatch(r"(\d{4}-\d{2}-\d{2})(?:_(\d{4}-\d{2}-\d{2}))?(?:-\d+)?", period)
+    if not days:
+        raise ValueError(f"not a period: {period}")
+    first = date.fromisoformat(days.group(1))
+    last = date.fromisoformat(days.group(2)) if days.group(2) else first
+    if last < first:
+        raise ValueError(f"period ends before it starts: {period}")
+    return first, last
+
+
+def digest_path(period: str) -> Path:
+    return DATA / f"digest-{period}.json"
+
+
+def load_period() -> dict:
+    """Return the exported period: {"period", "days", "cap", "items": {id: item}, "covered": [id]}."""
+    if not PERIOD_JSON.exists():
+        fail("no exported period; run `python3 fetch.py export` first")
+    return json.loads(PERIOD_JSON.read_text())
