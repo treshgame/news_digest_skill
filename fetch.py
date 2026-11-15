@@ -24,8 +24,8 @@ from datetime import date, datetime, timedelta, timezone
 
 import feedparser
 
-from common import (DATA, MAX_STORIES_PER_CATEGORY_PER_DAY, PERIOD_JSON, PERIOD_TXT, atomic_write, digest_path,
-                    fail, load_feeds, load_period, period_id)
+from common import (DATA, PERIOD_JSON, PERIOD_TXT, atomic_write, digest_path, fail, format_cap, load_config,
+                    load_feeds, load_period, period_id)
 
 ITEMS = DATA / "items.jsonl"
 STATE = DATA / "state.json"
@@ -201,7 +201,13 @@ def cap_per_feed_per_day(items: list[dict], cap: int) -> list[dict]:
     return kept
 
 
+def period_cap(per_day: int, days: int) -> int | None:
+    """A config limit (per day, -1 = none) for the whole period; None means no limit."""
+    return None if per_day == -1 else per_day * days
+
+
 def cmd_export(args) -> int:
+    config = load_config()
     regions = list(load_feeds())
     stored = [i for i in load_items().values() if i["region"] in regions]
     in_period = select_items(args, stored)
@@ -210,11 +216,15 @@ def cmd_export(args) -> int:
     else:  # the days the not-yet-digested items span
         first, last = min(item_day(i) for i in in_period), max(item_day(i) for i in in_period)
     period, days = unique_period_id(first, last), (last - first).days + 1
-    story_cap = MAX_STORIES_PER_CATEGORY_PER_DAY * days
+    story_cap = period_cap(config["newsPerCategoriesInRegion"], days)
+    region_cap = period_cap(config["newsPerRegions"], days)
+    language = config["language"]
     kept = cap_per_feed_per_day(in_period, args.cap)
 
     span = f"{days} day{'s' if days > 1 else ''}"
-    lines = [f"# period {period} ({span}), up to {story_cap} stories per category in each region",
+    limits = (f"cap {format_cap(story_cap)} stories per category in each region, "
+              f"{format_cap(region_cap)} per region in total; language {language}")
+    lines = [f"# period {period} ({span}); {limits}",
              "# id|source[/category hint]|title"]
     for region in regions:
         lines.append(f"## {region}")
@@ -227,11 +237,12 @@ def cmd_export(args) -> int:
     index = {i["id"]: {"region": i["region"], "date": iso_day(i["ts"]), "source": i["source"],
                        "title": i["title"], "desc": i["desc"], "link": i["link"]} for i in kept}
     # "covered" lists every item of the period, also those the per-feed cap left out, so `clean` retires them all.
-    atomic_write(PERIOD_JSON, json.dumps({"period": period, "days": days, "cap": story_cap, "items": index,
+    atomic_write(PERIOD_JSON, json.dumps({"period": period, "days": days, "language": language, "cap": story_cap,
+                                          "region_cap": region_cap, "items": index,
                                           "covered": [i["id"] for i in in_period]}, ensure_ascii=False))
     (DATA / "articles_read.txt").unlink(missing_ok=True)
     print(f"exported {len(kept)} of {len(in_period)} items for period {period} ({span}): "
-          f"~{len(text) // 4} tokens; cap {story_cap} stories per category in each region")
+          f"~{len(text) // 4} tokens; {limits}")
     return 0
 
 

@@ -29,14 +29,14 @@ Arguments: `$ARGUMENTS`
    ```
    python3 fetch.py fetch && python3 fetch.py export [--days N [--today]]
    ```
-   `export` prints the period id (e.g. `2026-11-15`, `2026-11-08_2026-11-15`, or with a `-2` suffix for a second digest of the same days) and the **cap**: the most stories allowed per category in each region, 5 per day of the period. Remember both. If it says there is nothing new to digest, tell the user and stop.
+   `export` prints the period id (e.g. `2026-11-15`, `2026-11-08_2026-11-15`, or with a `-2` suffix for a second digest of the same days), the **cap** (the most stories allowed per category in each region), the **region cap** (the most stories per region in total) and the **language** of the digest. These come from `config.yml`; never edit it yourself. Remember all four. "no limit" means only your judgment decides how many stories go in. If it says there is nothing new to digest, tell the user and stop.
 2. Read `interests.md` (if it does not exist, read `interests.example.md` and tell the user to copy it), then `data/period.txt`. Lines are `id|source[/category hint]|title`, grouped under `## Region`.
-3. Pick candidates from the titles alone, **about 1.5× the cap per category in each region** (fewer if the region has fewer good stories), then see their descriptions in one call:
+3. Pick candidates from the titles alone, **about 1.5× the cap per category in each region** (fewer if the region has fewer good stories; with no limit, every story you would consider for the digest), then see their descriptions in one call:
    ```
    python3 fetch.py show a3f9c1 b71c02 ...
    ```
 4. Optional: `python3 read_article.py <id>`, only if a chosen story cannot be explained from its description. The script stops you after 10.
-5. Choose the final stories, **up to the cap per category in each region**, and add them all in one call. The format is `id|category|title|explanation`. Leave the title empty to keep the feed's title. Always use exactly this quoted `<<'EOF'` form, so that `$` in the text stays intact:
+5. Choose the final stories, **up to the cap per category in each region and the region cap**, and add them all in one call. The format is `id|category|title|explanation`. Leave the title empty to keep the feed's title, but only if it is already in the digest's language; otherwise write the title translated. Always use exactly this quoted `<<'EOF'` form, so that `$` in the text stays intact:
    ```
    python3 addnews.py <<'EOF'
    a3f9c1|finance||The Fed left rates unchanged at 4%, delaying cheaper loans.
@@ -45,7 +45,7 @@ Arguments: `$ARGUMENTS`
    ```
    - Category: `politics`, `finance` or `tech`. You decide; the hint can be wrong. If none fits (disasters, society, health), use `politics`.
    - The output lists any `error line N`. Fix only those lines and send them again; valid lines are already saved.
-6. Read the stats in that output. The cap is a ceiling, not a target: aim for at least one story per category per region when something relevant exists; never pad. To swap a story: `python3 addnews.py --remove <id>`, then add the new one.
+6. Read the stats in that output. The caps are ceilings, not targets: aim for at least one story per category per region when something relevant exists; never pad. To swap a story: `python3 addnews.py --remove <id>`, then add the new one.
 7. Render, using the period from step 1:
    ```
    python3 render.py data/digest-<period>.json -o digests/<period>.html
@@ -62,7 +62,8 @@ Arguments: `$ARGUMENTS`
 
 ## Writing rules
 
-- Explanation: at most 180 characters, 1-2 sentences, English. Say what happened, then why it matters **if the source says so**. If it doesn't, write only what happened.
+- Language: write titles and explanations in the language `export` printed. If a story's source is in another language, translate it faithfully; translating is not adding knowledge. Keep names of people, places and organisations in their usual form in that language.
+- Explanation: at most 180 characters, 1-2 sentences. Say what happened, then why it matters **if the source says so**. If it doesn't, write only what happened.
 - Use only what the description or article says. Add no outside knowledge and no guesses.
 - Keep claims attributed: "Russia says...", "police allege...". Never turn an accusation or a claim into a fact.
 - If the description is empty, too thin or cut off to be sure, the story can still go in when its title is clear: leave the explanation empty, `id|category||`.

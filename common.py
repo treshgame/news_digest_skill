@@ -11,12 +11,19 @@ DATA = ROOT / "data"
 PERIOD_TXT = DATA / "period.txt"    # titles only, what the AI reads first
 PERIOD_JSON = DATA / "period.json"  # id -> full item, what the scripts look up
 
+CONFIG = ROOT / "config.yml"
+
 CATEGORIES = ("politics", "finance", "tech")
 
-# Cap per category within a region, per day of the period: a 1-day digest allows up to 5 politics,
-# 5 finance and 5 tech stories in each region, a 7-day digest up to 35 of each.
-MAX_STORIES_PER_CATEGORY_PER_DAY = 5
 MAX_EXPLANATION_CHARS = 180
+
+# Settings in config.yml and their defaults. Story limits are per day of the period (a 7-day digest
+# allows 7x as many); -1 means no limit.
+DEFAULT_CONFIG = {
+    "language": "English",
+    "newsPerCategoriesInRegion": 6,
+    "newsPerRegions": -1,
+}
 
 
 def fail(message: str):
@@ -29,6 +36,38 @@ def atomic_write(path: Path, text: str) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(text)
     tmp.replace(path)
+
+
+def load_config() -> dict:
+    """Return config.yml merged over DEFAULT_CONFIG. A missing file means all defaults."""
+    import yaml  # imported here, so the fetcher runs without PyYAML
+
+    config = dict(DEFAULT_CONFIG)
+    if CONFIG.exists():
+        try:
+            loaded = yaml.safe_load(CONFIG.read_text()) or {}
+        except yaml.YAMLError as exc:
+            fail(f"config.yml is not valid YAML: {exc}")
+        if not isinstance(loaded, dict):
+            fail("config.yml must be a list of `key: value` lines")
+        unknown = loaded.keys() - DEFAULT_CONFIG.keys()
+        if unknown:
+            fail(f"unknown settings in config.yml: {', '.join(sorted(map(str, unknown)))}; "
+                 f"known: {', '.join(DEFAULT_CONFIG)}")
+        config.update({key: value for key, value in loaded.items() if value is not None})
+
+    if not isinstance(config["language"], str) or not config["language"].strip():
+        fail("config.yml: language must be a language name, e.g. English")
+    config["language"] = config["language"].strip()
+    for key in ("newsPerCategoriesInRegion", "newsPerRegions"):
+        value = config[key]
+        if isinstance(value, bool) or not isinstance(value, int) or (value < 1 and value != -1):
+            fail(f"config.yml: {key} must be a whole number of 1 or more, or -1 for no limit (got {value!r})")
+    return config
+
+
+def format_cap(cap: int | None) -> str:
+    return "no limit" if cap is None else str(cap)
 
 
 def load_feeds() -> dict[str, list[dict]]:
@@ -72,7 +111,8 @@ def digest_path(period: str) -> Path:
 
 
 def load_period() -> dict:
-    """Return the exported period: {"period", "days", "cap", "items": {id: item}, "covered": [id]}."""
+    """Return the exported period: {"period", "days", "language", "cap", "region_cap", "items": {id: item},
+    "covered": [id]}. A cap of None means no limit."""
     if not PERIOD_JSON.exists():
         fail("no exported period; run `python3 fetch.py export` first")
     return json.loads(PERIOD_JSON.read_text())

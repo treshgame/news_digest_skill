@@ -1,0 +1,13 @@
+# newsdigest settings. Delete a line to use its default.
+
+# Language of the digest's titles and explanations. Stories from sources in another
+# language are translated by the AI. Default: English
+language: English
+
+# Most stories per category (politics, finance, tech) in each region, per day of the period:
+# a 3-day digest allows 3x this number. -1 = no limit, the AI alone decides what goes in. Default: 6
+newsPerCategoriesInRegion: 6
+
+# Most stories in each region across all categories, per day of the period.
+# -1 = no limit (the per-category limit above still applies). Default: -1
+newsPerRegions: -1

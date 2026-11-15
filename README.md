@@ -25,25 +25,26 @@ Design rules that keep it cheap and safe:
 - **Scripts do the mechanical work.** The AI never searches the web, never writes JSON or HTML, and refers to stories by a 6-character id.
 - **Few tokens.** The AI sees titles only at first (at most 3 items per feed per day), then descriptions for about 1.5× the story cap per category in each region. Weak, cheap models work fine.
 - **Feed text is untrusted.** `SKILL.md` tells the model to ignore any instructions found inside headlines or articles.
-- **Output:** up to 5 stories per category in each region **per day** of the period, explanations of at most 180 characters. Print it on A4: each region starts a new page (a full region may take more than one).
+- **Output:** by default up to 6 stories per category in each region **per day** of the period (see *Settings*), explanations of at most 180 characters. Print it on A4: each region starts a new page (a full region may take more than one).
 
 ## Requirements
 
 - Python 3.11+ (uses `tomllib`)
-- `pip install feedparser`
+- `pip install feedparser pyyaml` (the background fetcher needs only `feedparser`)
 - Optional: `pip install trafilatura` for better article text in `read_article.py` (a simple built-in extractor is used otherwise)
 - Any AI agent that can read files and run shell commands
 
 ## Setup
 
 1. Clone the repo anywhere, for example `~/projects/newsdigest`.
-2. Install the dependency: `pip install feedparser`.
+2. Install the dependencies: `pip install feedparser pyyaml`.
 3. Make your agent see the skill: put or link the folder where your agent loads skills from, or point the agent at `SKILL.md`. For example:
    ```
    ln -s ~/projects/newsdigest ~/.claude/skills/newsdigest
    ```
 4. Digests are written to `digests/<period>.html` inside the project folder (e.g. `digests/2026-11-14.html` for one day, `digests/2026-11-08_2026-11-14.html` for a week; a second digest of the same days gets a `-2` suffix). To save them elsewhere (a notes vault, a synced folder), change the `-o` path in the render step of `SKILL.md`.
 5. Create your interests file: `cp interests.example.md interests.md`, then edit it (see *Change your interests* below). `interests.md` is ignored by git, so your preferences stay private.
+   Optionally adjust `config.yml`: digest language and story limits (see *Settings*).
 6. Test the fetcher: `python3 fetch.py fetch -v` prints one line per feed.
 7. Ask your agent: *"make the news digest"*, or have it follow `SKILL.md`. Arguments (e.g. `/newsdigest --days 3 --today` in Claude Code, or in words like *"news for the last 3 days"*):
    - none: everything fetched up to this moment that is not in a digest yet (see below).
@@ -57,20 +58,38 @@ As often as suits you. Without arguments, a digest takes **everything fetched up
 
 A long gap makes a long digest, on purpose. The AI's job is to keep out what doesn't matter to you (see *Change your interests*), not to squeeze the period into a fixed size.
 
-The limit grows with the period: up to **5 stories per category, per region, per day** the digest covers (`MAX_STORIES_PER_CATEGORY_PER_DAY` in `common.py`):
+The limits grow with the period: by default up to **6 stories per category, per region, per day** the digest covers (`newsPerCategoriesInRegion` in `config.yml`):
 
 | The digest covers | Cap per category in each region |
 |---|---|
-| 1 day | 5 |
-| 2 days | 10 |
-| 4 days | 20 |
-| 7 days | 35 |
+| 1 day | 6 |
+| 2 days | 12 |
+| 4 days | 24 |
+| 7 days | 42 |
 
-The cap is a ceiling, not a target: the AI only adds stories that are worth it.
+The caps are ceilings, not targets: the AI only adds stories that are worth it.
 
 To look at specific days instead, use `--days N` (the last N whole days, up to yesterday) or `--days N --today` (up to now). These take every stored item of those days, digested or not.
 
 The very first digest starts at the oldest stored item: the first fetch looks about a week back (`FIRST_RUN_DAYS` in `fetch.py`).
+
+## Settings
+
+`config.yml` in the project folder holds the settings. Delete a line, or the whole file, to use the defaults.
+
+```yaml
+language: English               # language of titles and explanations
+newsPerCategoriesInRegion: 6    # most stories per category in each region, per day
+newsPerRegions: -1              # most stories per region in total, per day
+```
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `language` | `English` | The digest's language. Stories from sources in another language are translated by the AI. |
+| `newsPerCategoriesInRegion` | `6` | Most stories per category (politics, finance, tech) in each region, **per day** of the period. `-1`: no limit, the AI alone decides what is worth including. |
+| `newsPerRegions` | `-1` | Most stories in each region across all categories, **per day** of the period. `-1`: no limit, only the per-category limit applies. |
+
+Limits are multiplied by the number of days the digest covers, so a weekly digest gets 7× the daily limit. `addnews.py` enforces them, so the AI cannot exceed them. Invalid values stop `fetch.py export` with an error that names the setting.
 
 ## Change your interests
 
@@ -111,7 +130,7 @@ If you add a region, check that categories still make sense: the digest always u
 
 - **RSS or Atom with publication dates.** Items without dates cannot be placed on a day, so they are useless here. (This is why Nikkei was dropped.)
 - **Descriptions in the feed.** The AI explains a story from the feed's summary. Feeds with an empty or truncated description produce weaker results.
-- **English.** The explanations are written in English from the source text.
+- **Language.** Any language works: the AI translates stories into the `language` set in `config.yml`. Sources already in that language give the most faithful results.
 - **Reputable, regularly updated, one topic or region per feed.** Section feeds (`/politics`, `/business`) are better than one giant "all news" feed, because the cap is per feed.
 - **Several outlets per region.** The AI prefers stories covered by more than one source, which filters noise.
 - Check a feed before adding it: `python3 fetch.py fetch -v` shows how many items each feed returned and any errors.

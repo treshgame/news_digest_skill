@@ -15,7 +15,8 @@ import collections
 import json
 import sys
 
-from common import CATEGORIES, MAX_EXPLANATION_CHARS, atomic_write, digest_path, fail, load_feeds, load_period
+from common import (CATEGORIES, MAX_EXPLANATION_CHARS, atomic_write, digest_path, fail, format_cap, load_feeds,
+                    load_period)
 
 
 def load_digest(period: str) -> list[dict]:
@@ -27,13 +28,14 @@ def save_digest(period: str, stories: list[dict]) -> None:
     atomic_write(digest_path(period), json.dumps(stories, indent=1, ensure_ascii=False))
 
 
-def stats_line(stories: list[dict], cap: int) -> str:
+def stats_line(stories: list[dict], period_data: dict) -> str:
     parts = []
     for region in load_feeds():
         count = collections.Counter(s["category"] for s in stories if s["region"] == region)
         detail = " ".join(f"{c[0]}{count[c]}" for c in CATEGORIES)  # p2 f1 t3
         parts.append(f"{region}={sum(count.values())} ({detail})")
-    return f"{', '.join(parts)}; total={len(stories)}, max {cap} per category in a region"
+    return (f"{', '.join(parts)}; total={len(stories)}, max {format_cap(period_data['cap'])} per category "
+            f"in a region, {format_cap(period_data.get('region_cap'))} per region")
 
 
 def parse_line(line: str) -> tuple[str, str, str, str]:
@@ -46,7 +48,7 @@ def parse_line(line: str) -> tuple[str, str, str, str]:
     raise ValueError("expected id|category|title|explanation")
 
 
-def add_story(line: str, stories: list[dict], items: dict, cap: int) -> str:
+def add_story(line: str, stories: list[dict], items: dict, cap: int | None, region_cap: int | None) -> str:
     """Append the line's story to stories. Return "added" or "skipped"; raise ValueError if invalid."""
     story_id, category, title, explanation = parse_line(line)
     if story_id not in items:
@@ -58,8 +60,12 @@ def add_story(line: str, stories: list[dict], items: dict, cap: int) -> str:
     if any(s["id"] == story_id for s in stories):
         return "skipped"
     item = items[story_id]
-    if sum(s["region"] == item["region"] and s["category"] == category for s in stories) >= cap:
+    in_region = [s for s in stories if s["region"] == item["region"]]
+    if cap is not None and sum(s["category"] == category for s in in_region) >= cap:
         raise ValueError(f"{item['region']} already has {cap} {category} stories; "
+                         "drop this one or use --remove first")
+    if region_cap is not None and len(in_region) >= region_cap:
+        raise ValueError(f"{item['region']} already has {region_cap} stories in total; "
                          "drop this one or use --remove first")
     stories.append({"id": story_id, "region": item["region"], "date": item["date"], "category": category,
                     "title": title or item["title"], "explanation": explanation, "link": item["link"]})
@@ -73,11 +79,12 @@ def main() -> int:
     args = parser.parse_args()
 
     period_data = load_period()
-    period, cap = period_data["period"], period_data["cap"]
+    period = period_data["period"]
+    cap, region_cap = period_data["cap"], period_data.get("region_cap")
     stories = load_digest(period)
 
     if args.stats:
-        print(stats_line(stories, cap))
+        print(stats_line(stories, period_data))
         return 0
 
     if args.remove:
@@ -86,7 +93,7 @@ def main() -> int:
             fail(f"not in digest: {' '.join(sorted(missing))}")
         stories = [s for s in stories if s["id"] not in args.remove]
         save_digest(period, stories)
-        print(f"removed {len(args.remove)}; {stats_line(stories, cap)}")
+        print(f"removed {len(args.remove)}; {stats_line(stories, period_data)}")
         return 0
 
     results, errors = collections.Counter(), 0
@@ -94,12 +101,13 @@ def main() -> int:
         if not line.strip():
             continue
         try:
-            results[add_story(line, stories, period_data["items"], cap)] += 1
+            results[add_story(line, stories, period_data["items"], cap, region_cap)] += 1
         except ValueError as exc:
             print(f"error line {number}: {exc}", file=sys.stderr)
             errors += 1
     save_digest(period, stories)
-    print(f"added {results['added']}, skipped {results['skipped']}, errors {errors}; {stats_line(stories, cap)}")
+    print(f"added {results['added']}, skipped {results['skipped']}, errors {errors}; "
+          f"{stats_line(stories, period_data)}")
     return 1 if errors else 0
 
 
